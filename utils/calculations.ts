@@ -259,78 +259,118 @@ export const calculateHeatLoad = (
   const totalTransmissionLoad = wallLoad + ceilingLoad + floorLoad;
 
   // PRODUCT LOAD — Refrigeration Product Load Master Equation
-  // Q = m × [Ca(Tin − Tf) + L + Cb(Tf − Tout)] / (CoolingTime × 3600)
   //
-  // Q  = Product refrigeration load (kW)
-  // m  = Daily product loading (kg)
-  // Ca = Specific heat ABOVE freezing (kJ/kg·°C)
-  // Cb = Specific heat BELOW freezing (kJ/kg·°C)
-  // L  = Latent heat of freezing (kJ/kg)
-  // Tin  = Incoming product temperature (°C)
-  // Tf   = Freezing temperature of the product (°C)
-  // Tout = Final storage temperature (°C)
-  // CoolingTime = Pull-down / cooling time (hours)
-  // 3600 = hours → seconds conversion
+  // STEP 1: Determine the case based on temperatures
+  // Let:
+  //   T_in  = product entering temperature
+  //   T_out = product final temperature
+  //   T_f   = freezing point
   //
-  // Three possible cooling stages with automatic case detection:
-  //   1) Cooling above freezing  → Ca(Tin − Tf)
-  //   2) Freezing (phase change) → L
-  //   3) Cooling below freezing  → Cb(Tf − Tout)
+  // CASE 1: If T_in > T_f AND T_out > T_f → Product remains UNFROZEN → Use ONLY Cp_above
+  //         Q = m × Cp_above × (T_in - T_out)
+  //
+  // CASE 2: If T_in > T_f AND T_out < T_f → Product CROSSES FREEZING → Use Cp_above + Latent + Cp_below
+  //         Q = m × [ Cp_above × (T_in - T_f) + Latent Heat + Cp_below × (T_f - T_out) ]
+  //
+  // CASE 3: If T_in < T_f AND T_out < T_f → Product ALREADY FROZEN → Use ONLY Cp_below
+  //         Q = m × Cp_below × (T_in - T_out)
+  //
+  // FINAL CONVERSION: Q_kW = Q / (time_hours × 3600)
 
   const Tin_cr = productIncomingC; // Incoming product temperature (°C)
   const Tf_cr = productData.freezingPoint ?? -100; // Freezing point (°C), default very low if not set
   const Tout_cr = productOutgoingC; // Final storage temperature (°C)
-  const Ca_cr = productData.cpAboveFreezing; // kJ/kg·°C
-  const Cb_cr = productData.cpBelowFreezing ?? productData.cpAboveFreezing; // kJ/kg·°C, fallback to Ca
-  const L_cr = getLatentHeatOfFusion(productData); // kJ/kg, lookup from freezerProducts if not provided
+  const Ca_cr = productData.cpAboveFreezing; // kJ/kg·°C (Cp above freezing)
+  const Cb_cr = productData.cpBelowFreezing ?? productData.cpAboveFreezing; // kJ/kg·°C (Cp below freezing), fallback to Ca
+  const L_cr = getLatentHeatOfFusion(productData); // kJ/kg (Latent heat of fusion)
   const m_cr = productMass; // kg (daily loading mass)
   const coolingTime_cr = productData.pullDownHours; // hours
 
-  // CORRECT ENGINEERING LOGIC:
-  // Each term activates only when temperature crosses its region
-  let Q_per_kg = 0; // Total energy per kg (kJ/kg)
+  // STEP 2: Identify the correct case and apply formula
+  let Q_total_kJ = 0; // Total energy (kJ)
+  let productLoadCase_cr = '';
+  let aboveFreezingTerm_cr = 0;
+  let latentTerm_cr = 0;
+  let belowFreezingTerm_cr = 0;
 
-  // Term 1: Cooling ABOVE freezing (if Tin > Tf)
-  if (Tin_cr > Tf_cr) {
-    Q_per_kg += Ca_cr * Math.max(0, Tin_cr - Math.max(Tout_cr, Tf_cr));
+  if (Tin_cr > Tf_cr && Tout_cr > Tf_cr) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // CASE 1: Product remains UNFROZEN (both temps above freezing)
+    // Formula: Q = m × Cp_above × (T_in - T_out)
+    // ═══════════════════════════════════════════════════════════════════════
+    productLoadCase_cr = '1 (Unfrozen only - both temps above freezing)';
+    aboveFreezingTerm_cr = Ca_cr * Math.abs(Tin_cr - Tout_cr);
+    Q_total_kJ = m_cr * aboveFreezingTerm_cr;
+
+    console.log(`[Cold Room - Product Load] CASE 1: Unfrozen only`);
+    console.log(`  T_in (${Tin_cr}°C) > T_f (${Tf_cr}°C) AND T_out (${Tout_cr}°C) > T_f (${Tf_cr}°C)`);
+    console.log(`  Formula: Q = m × Cp_above × (T_in - T_out)`);
+    console.log(`  Q = ${m_cr} × ${Ca_cr} × (${Tin_cr} - ${Tout_cr})`);
+    console.log(`  Q = ${m_cr} × ${Ca_cr} × ${Math.abs(Tin_cr - Tout_cr).toFixed(2)}`);
+    console.log(`  Q = ${Q_total_kJ.toFixed(2)} kJ`);
+
+  } else if (Tin_cr > Tf_cr && Tout_cr < Tf_cr) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // CASE 2: Product CROSSES FREEZING (most important case)
+    // Formula: Q = m × [ Cp_above × (T_in - T_f) + Latent Heat + Cp_below × (T_f - T_out) ]
+    // ═══════════════════════════════════════════════════════════════════════
+    productLoadCase_cr = '2 (Freezing case - product crosses freezing point)';
+    aboveFreezingTerm_cr = Ca_cr * Math.abs(Tin_cr - Tf_cr);
+    latentTerm_cr = L_cr;
+    belowFreezingTerm_cr = Cb_cr * Math.abs(Tf_cr - Tout_cr);
+    const Q_per_kg = aboveFreezingTerm_cr + latentTerm_cr + belowFreezingTerm_cr;
+    Q_total_kJ = m_cr * Q_per_kg;
+
+    console.log(`[Cold Room - Product Load] CASE 2: Freezing case (MOST IMPORTANT)`);
+    console.log(`  T_in (${Tin_cr}°C) > T_f (${Tf_cr}°C) AND T_out (${Tout_cr}°C) < T_f (${Tf_cr}°C)`);
+    console.log(`  Formula: Q = m × [ Cp_above × (T_in - T_f) + Latent Heat + Cp_below × (T_f - T_out) ]`);
+    console.log(`  Step 1 - Above freezing: Cp_above × (T_in - T_f) = ${Ca_cr} × (${Tin_cr} - ${Tf_cr}) = ${aboveFreezingTerm_cr.toFixed(2)} kJ/kg`);
+    console.log(`  Step 2 - Latent heat: L = ${latentTerm_cr.toFixed(2)} kJ/kg`);
+    console.log(`  Step 3 - Below freezing: Cp_below × (T_f - T_out) = ${Cb_cr} × (${Tf_cr} - ${Tout_cr}) = ${belowFreezingTerm_cr.toFixed(2)} kJ/kg`);
+    console.log(`  Total Q per kg: ${aboveFreezingTerm_cr.toFixed(2)} + ${latentTerm_cr.toFixed(2)} + ${belowFreezingTerm_cr.toFixed(2)} = ${Q_per_kg.toFixed(2)} kJ/kg`);
+    console.log(`  Q = m × Q_per_kg = ${m_cr} × ${Q_per_kg.toFixed(2)} = ${Q_total_kJ.toFixed(2)} kJ`);
+
+  } else if (Tin_cr < Tf_cr && Tout_cr < Tf_cr) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // CASE 3: Product ALREADY FROZEN (both temps below freezing)
+    // Formula: Q = m × Cp_below × (T_in - T_out)
+    // ═══════════════════════════════════════════════════════════════════════
+    productLoadCase_cr = '3 (Already frozen - both temps below freezing)';
+    belowFreezingTerm_cr = Cb_cr * Math.abs(Tin_cr - Tout_cr);
+    Q_total_kJ = m_cr * belowFreezingTerm_cr;
+
+    console.log(`[Cold Room - Product Load] CASE 3: Already frozen`);
+    console.log(`  T_in (${Tin_cr}°C) < T_f (${Tf_cr}°C) AND T_out (${Tout_cr}°C) < T_f (${Tf_cr}°C)`);
+    console.log(`  Formula: Q = m × Cp_below × (T_in - T_out)`);
+    console.log(`  Q = ${m_cr} × ${Cb_cr} × (${Tin_cr} - ${Tout_cr})`);
+    console.log(`  Q = ${m_cr} × ${Cb_cr} × ${Math.abs(Tin_cr - Tout_cr).toFixed(2)}`);
+    console.log(`  Q = ${Q_total_kJ.toFixed(2)} kJ`);
+
+  } else {
+    // Edge case: T_in <= T_f AND T_out >= T_f (warming scenario - unusual but handle gracefully)
+    productLoadCase_cr = 'Edge case (warming - not typical for cold room)';
+    aboveFreezingTerm_cr = Ca_cr * Math.abs(Tin_cr - Tout_cr);
+    Q_total_kJ = m_cr * aboveFreezingTerm_cr;
+
+    console.log(`[Cold Room - Product Load] Edge case: Warming scenario (unusual)`);
+    console.log(`  Using simplified calculation with Cp_above`);
   }
 
-  // Term 2: Latent heat (ONLY if Tin > Tf AND Tout < Tf)
-  if (Tin_cr > Tf_cr && Tout_cr < Tf_cr) {
-    Q_per_kg += L_cr;
-  }
-
-  // Term 3: Cooling BELOW freezing (if Tout < Tf)
-  if (Tout_cr < Tf_cr) {
-    Q_per_kg += Cb_cr * Math.max(0, Math.min(Tin_cr, Tf_cr) - Tout_cr);
-  }
-
-  // For logging breakdown:
-  const aboveFreezingTerm_cr = Tin_cr > Tf_cr ? Ca_cr * Math.max(0, Tin_cr - Math.max(Tout_cr, Tf_cr)) : 0;
-  const latentTerm_cr = (Tin_cr > Tf_cr && Tout_cr < Tf_cr) ? L_cr : 0;
-  const belowFreezingTerm_cr = Tout_cr < Tf_cr ? Cb_cr * Math.max(0, Math.min(Tin_cr, Tf_cr) - Tout_cr) : 0;
-
-  // Master equation → Q in kW
-  const productLoadKW_cr = (m_cr * Q_per_kg) / (coolingTime_cr * 3600);
+  // STEP 3: Convert to kW
+  // Q_kW = Q / (time_hours × 3600)
+  const productLoadKW_cr = Q_total_kJ / (coolingTime_cr * 3600);
 
   // Convert to kJ/24Hr for internal consistency with rest of calculation pipeline
   const productLoadBase = productLoadKW_cr * 24 * 3600;
 
-  const productLoadCase_cr =
-    Tin_cr > Tf_cr && Tout_cr > Tf_cr
-      ? '1 (above freezing only)'
-      : Tin_cr <= Tf_cr && Tout_cr < Tf_cr
-        ? '2 (below freezing only)'
-        : '3 (freezing occurs)';
-  console.log(
-    `[Cold Room - Product Load Master Eq] Case: ${productLoadCase_cr}`,
-  );
-  console.log(
-    `[Cold Room - Product Load Master Eq] Tin=${Tin_cr}°C, Tf=${Tf_cr}°C, Tout=${Tout_cr}°C, m=${m_cr}kg, CT=${coolingTime_cr}hrs`,
-  );
-  console.log(
-    `[Cold Room - Product Load Master Eq] Above=${aboveFreezingTerm_cr.toFixed(2)}, Latent=${latentTerm_cr.toFixed(2)}, Below=${belowFreezingTerm_cr.toFixed(2)} → Q=${productLoadKW_cr.toFixed(4)} kW`,
-  );
+  console.log(`[Cold Room - Product Load] FINAL CONVERSION:`);
+  console.log(`  Q_kW = Q / (time_hours × 3600)`);
+  console.log(`  Q_kW = ${Q_total_kJ.toFixed(2)} / (${coolingTime_cr} × 3600)`);
+  console.log(`  Q_kW = ${Q_total_kJ.toFixed(2)} / ${(coolingTime_cr * 3600).toFixed(0)}`);
+  console.log(`  Q_kW = ${productLoadKW_cr.toFixed(4)} kW`);
+  console.log(`[Cold Room - Product Load Master Eq] Case: ${productLoadCase_cr}`);
+  console.log(`[Cold Room - Product Load Master Eq] Tin=${Tin_cr}°C, Tf=${Tf_cr}°C, Tout=${Tout_cr}°C, m=${m_cr}kg, CT=${coolingTime_cr}hrs`);
+  console.log(`[Cold Room - Product Load Master Eq] Above=${aboveFreezingTerm_cr.toFixed(2)}, Latent=${latentTerm_cr.toFixed(2)}, Below=${belowFreezingTerm_cr.toFixed(2)} → Q=${productLoadKW_cr.toFixed(4)} kW`);
 
   // Apply Inside RH Correction to Product Load
   // Formula: Q_adj,RH_in = Q_base × [1 + k × (RH_ref - RH_in) / 10]
