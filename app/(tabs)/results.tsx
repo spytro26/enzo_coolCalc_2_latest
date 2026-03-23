@@ -257,6 +257,56 @@ export default function ColdRoomResultsTab() {
     </View>
   );
 
+  // Handler for navigating to sign up from guest prompt
+  const handleSignUpFromGuestPrompt = async () => {
+    await saveGuestInputs({ roomData, productData, miscData });
+    router.push('/sign-up' as any);
+  };
+
+  // Handler for navigating to sign in from guest prompt
+  const handleSignInFromGuestPrompt = async () => {
+    await saveGuestInputs({ roomData, productData, miscData });
+    router.push('/sign-in' as any);
+  };
+
+  // If user is not logged in, show guest prompt instead of results
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          <View style={styles.content}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Enzo Cool Calc</Text>
+              <Text style={styles.subtitle}>Cold Room Heat Load Results</Text>
+            </View>
+
+            {/* Guest Mode Prompt */}
+            <View style={styles.guestPromptCard}>
+              <Ionicons name="lock-closed-outline" size={60} color="#2563eb" />
+              <Text style={styles.guestTitle}>Create Account to View Results</Text>
+              <Text style={styles.guestText}>
+                You need to create an account before seeing the calculation results. Your inputs have been saved and will be available after you sign up.
+              </Text>
+              <TouchableOpacity style={styles.signUpButton} onPress={handleSignUpFromGuestPrompt}>
+                <Text style={styles.signUpButtonText}>Create Account</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.signInButton} onPress={handleSignInFromGuestPrompt}>
+                <Text style={styles.signInButtonText}>Already have an account? Sign In</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Powered by Enzo</Text>
+              <Text style={styles.footerSubtext}>
+                Professional cold room heat load calculations following ASHRAE standards
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Sign Up Modal for PDF Sharing */}
@@ -290,8 +340,8 @@ export default function ColdRoomResultsTab() {
             <Text style={styles.subtitle}>Cold Room Heat Load Results</Text>
 
             {/* PDF Export Button */}
-            <TouchableOpacity 
-              style={[styles.pdfButton, isGenerating && styles.pdfButtonDisabled]} 
+            <TouchableOpacity
+              style={[styles.pdfButton, isGenerating && styles.pdfButtonDisabled]}
               onPress={handleSharePDF}
               disabled={isGenerating}
             >
