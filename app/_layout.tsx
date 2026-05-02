@@ -8,6 +8,9 @@ import { AuthProvider, useAuth } from '@/hooks/AuthProvider';
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet, Image } from 'react-native';
 
+// Set to true for production (requires login), false for development (skip login)
+const IN_PROD = false;
+
 // Loading screen shown while checking auth state
 function LoadingScreen() {
   return (
@@ -40,8 +43,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
     console.log('[AuthGate] Auth state:', { user: !!user, isGuestMode, segments });
 
-    if (!user && !isGuestMode && !inAuthGroup) {
-      // User is not signed in, not in guest mode, and not on auth screen -> go to sign-up
+    if (!IN_PROD && !user && !isGuestMode && !inAppSection) {
+      // Dev mode: skip login, go straight to app
+      router.replace('/(tabs)');
+    } else if (IN_PROD && !user && !isGuestMode && !inAuthGroup) {
+      // Prod mode: require login
       console.log('[AuthGate] No user and not guest, redirecting to sign-up');
       router.replace('/sign-up');
     } else if (user && !inAppSection) {

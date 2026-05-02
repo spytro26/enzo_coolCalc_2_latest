@@ -17,6 +17,9 @@ import { useAuth } from '@/hooks/AuthProvider';
 import { generateAndSharePDF, PDFData } from '@/utils/pdfGenerator';
 import { saveCalculationToFirestore, getCalculationTypeFromTitle } from '@/utils/calculationStorage';
 
+// Set to true for production (requires login to see results), false for development
+const IN_PROD = false;
+
 export default function BlastResultsTab() {
     const { calculateResults, roomData, productData, miscData } = useBlastStorageContext();
     const { userProfile, getUserDisplayName, user, saveGuestInputs } = useAuth();
@@ -41,7 +44,7 @@ export default function BlastResultsTab() {
 
     const handleSharePDF = async () => {
         // If user is not logged in, show the sign up modal
-        if (!user) {
+        if (IN_PROD && !user) {
             setShowSignUpModal(true);
             return;
         }
