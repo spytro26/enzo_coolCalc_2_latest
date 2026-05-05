@@ -299,9 +299,10 @@ export default function ColdRoomResultsTab() {
             </View>
 
             <View style={styles.footer}>
-              <Text style={styles.footerText}>Powered by Enzo</Text>
-              <Text style={styles.footerSubtext}>
-                Professional cold room heat load calculations following ASHRAE standards
+              <Text style={styles.footerText}>Enzo CoolCalc</Text>
+              <Text style={styles.footerBrand}>A brand of Pragya Refrigeration &amp; Electricals Pvt Ltd</Text>
+              <Text style={styles.footerContact}>
+                Contact sales: accounts1@pragyarefrigeration.in{'\n'}+91-7358049664
               </Text>
             </View>
           </View>
@@ -467,9 +468,13 @@ export default function ColdRoomResultsTab() {
           </SectionCard>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Powered by Enzo</Text>
-            <Text style={styles.footerSubtext}>
-              Professional cold room heat load calculations following ASHRAE standards
+            <Text style={styles.footerText}>Enzo CoolCalc</Text>
+            <Text style={styles.footerBrand}>A brand of Pragya Refrigeration &amp; Electricals Pvt Ltd</Text>
+            <Text style={styles.footerContact}>
+              Contact sales: accounts1@pragyarefrigeration.in{'\n'}+91-7358049664
+            </Text>
+            <Text style={styles.footerDisclaimer}>
+              Results are based on certain assumptions and approximations
             </Text>
           </View>
         </View>
@@ -611,11 +616,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1e40af',
     fontWeight: '600',
+    marginBottom: 2,
+  },
+  footerBrand: {
+    fontSize: 11,
+    color: '#1e40af',
+    fontWeight: '500',
     marginBottom: 3,
+    textAlign: 'center',
   },
   footerSubtext: {
     fontSize: 11,
     color: '#64748b',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    fontWeight: '400',
+    marginBottom: 4,
+  },
+  footerContact: {
+    fontSize: 10,
+    color: '#475569',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginBottom: 4,
+    lineHeight: 16,
+  },
+  footerDisclaimer: {
+    fontSize: 9,
+    color: '#94a3b8',
     textAlign: 'center',
     fontStyle: 'italic',
     fontWeight: '400',

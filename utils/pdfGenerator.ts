@@ -4,6 +4,7 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Alert, Platform } from 'react-native';
 import { Asset } from 'expo-asset';
+import { LOGO_BASE64 } from './logoBase64';
 
 const withTimeout = <T>(
   promise: Promise<T>,
@@ -55,6 +56,12 @@ const getLogoBase64 = async (): Promise<{
   watermark: string;
   status: string;
 }> => {
+  // Embedded base64 — guaranteed to load on Android & iOS, no filesystem dep
+  if (LOGO_BASE64 && LOGO_BASE64.length > 100) {
+    _cachedLogoBase64 = LOGO_BASE64;
+    return { logo: LOGO_BASE64, watermark: LOGO_BASE64, status: '' };
+  }
+
   // Return cached result if available
   if (_cachedLogoBase64) {
     console.log('[PDF] Using cached logo base64');
@@ -63,10 +70,10 @@ const getLogoBase64 = async (): Promise<{
 
   const errors: string[] = [];
 
-  // Load the asset once — use the smaller PDF-optimized version
+  // Load the asset once — use clean transparent logo (no white border)
   let logoAsset: Asset;
   try {
-    logoAsset = Asset.fromModule(require('../assets/images/engo_pdf.png'));
+    logoAsset = Asset.fromModule(require('../assets/images/logo.png'));
     await withTimeout(logoAsset.downloadAsync(), 8000, 'Asset download timed out');
     console.log('[PDF] Asset info:', {
       uri: logoAsset.uri,
@@ -74,11 +81,11 @@ const getLogoBase64 = async (): Promise<{
       downloaded: logoAsset.downloaded,
     });
   } catch (e: any) {
-    // If the optimized image doesn't exist, try the original
+    // If logo.png missing, try the PDF-optimized fallback
     try {
-      logoAsset = Asset.fromModule(require('../assets/images/engo.png'));
-      await withTimeout(logoAsset.downloadAsync(), 8000, 'Asset download timed out (original)');
-      console.log('[PDF] Fallback to original engo.png, Asset info:', {
+      logoAsset = Asset.fromModule(require('../assets/images/engo_pdf.png'));
+      await withTimeout(logoAsset.downloadAsync(), 8000, 'Asset download timed out (fallback)');
+      console.log('[PDF] Fallback to engo_pdf.png, Asset info:', {
         uri: logoAsset.uri,
         localUri: logoAsset.localUri,
         downloaded: logoAsset.downloaded,
@@ -731,7 +738,7 @@ const generateHTMLContent = (
     ? `
       @page { margin: 8mm; }
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      body { -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased; padding-bottom: 0; overflow: hidden; font-size: 8.5px; }
+      body { -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased; padding-bottom: 28px; overflow: hidden; font-size: 8.5px; }
       .ios-fit { zoom: 0.88; }
       .ios-fit.ios-fit--freezer { zoom: 0.86; }
       .info-card, .summary-card, .meta-row { page-break-inside: avoid; break-inside: avoid; }
@@ -778,7 +785,7 @@ const generateHTMLContent = (
           height: ${isIOS ? 'auto' : '100vh'};
           position: relative;
           max-height: ${isIOS ? 'none' : '285mm'};
-          padding-bottom: ${isIOS ? '0' : '18px'};
+          padding-bottom: ${isIOS ? '0' : '28px'};
           overflow: hidden;
         }
 
@@ -827,20 +834,23 @@ const generateHTMLContent = (
         }
 
         .logo-box {
-          width: 54px;
-          height: 54px;
-          border-radius: 10px;
+          width: 130px;
+          height: 52px;
+          border-radius: 6px;
           background: #ffffff;
           display: flex;
           align-items: center;
           justify-content: center;
           border: none;
+          padding: 4px 8px;
+          overflow: hidden;
         }
 
         .logo-box img {
-          width: 42px;
-          height: 42px;
+          width: 100%;
+          height: 100%;
           object-fit: contain;
+          display: block;
         }
 
         .brand-block {
@@ -860,6 +870,13 @@ const generateHTMLContent = (
           text-transform: uppercase;
           letter-spacing: 0.8px;
           opacity: 0.9;
+        }
+
+        .brand-tagline {
+          font-size: 8px;
+          letter-spacing: 0.4px;
+          opacity: 0.85;
+          font-style: italic;
         }
 
         .summary-right {
@@ -1074,17 +1091,23 @@ const generateHTMLContent = (
           left: 8mm;
           right: 8mm;
           text-align: center;
-          font-size: 8.5px;
-          color: rgba(30, 30, 30, 0.75);
-          border-top: 1px solid #cfd5dc;
-          padding-top: 6px;
-          background: rgba(255, 255, 255, 0.95);
-          letter-spacing: 0.4px;
+          background: transparent;
+          border: none;
+          padding: 0;
+          letter-spacing: 0.3px;
         }
 
-        .footer-brand {
-          font-weight: 700;
-          color: var(--primary-blue);
+        .footer-contact {
+          font-size: 8.5px;
+          font-weight: 600;
+          color: #1e1e1e;
+        }
+
+        .footer-disclaimer {
+          font-size: 7.5px;
+          color: rgba(30, 30, 30, 0.7);
+          margin-top: 2px;
+          font-style: italic;
         }
       ${iosOnlyStyles}
       </style>
@@ -1116,6 +1139,7 @@ const generateHTMLContent = (
             </div>
             <div class="brand-block">
               <div class="brand-title">COOLCALC</div>
+              <div class="brand-tagline">A brand of Pragya Refrigeration &amp; Electricals Pvt Ltd</div>
               <div class="brand-subtitle">Heat Load Calculation Report</div>
             </div>
           </div>
@@ -1136,6 +1160,10 @@ const generateHTMLContent = (
           ${inputsHTML}
           ${detailedSectionsHTML}
         </div>
+      </div>
+      <div class="footer">
+        <div class="footer-contact">Contact our sales for Equipment selection and Commercials at accounts1@pragyarefrigeration.in &nbsp;|&nbsp; +91-7358049664</div>
+        <div class="footer-disclaimer">Results are based on certain assumptions and approximations</div>
       </div>
   ${logoStatus ? `<!-- Debug: ${logoStatus} -->` : ''}
       ${isIOS ? '</div>' : ''}
