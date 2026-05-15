@@ -493,6 +493,7 @@ const generateHTMLContent = (
   isIOS: boolean = false,
 ): string => {
   const isFreezerDoc = (data?.title || '').toLowerCase().includes('freezer');
+  const isColdRoomDoc = (data?.title || '').toLowerCase().includes('cold room');
 
   const reportMetaHTML =
     data.userName || data.projectName
@@ -741,6 +742,7 @@ const generateHTMLContent = (
       body { -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased; padding-bottom: 28px; overflow: hidden; font-size: 8.5px; }
       .ios-fit { zoom: 0.88; }
       .ios-fit.ios-fit--freezer { zoom: 0.86; }
+      .ios-fit.ios-fit--coldroom { zoom: 0.83; }
       .info-card, .summary-card, .meta-row { page-break-inside: avoid; break-inside: avoid; }
       .watermark { top: 50%; opacity: 0.14; }
       .watermark img { width: 320px; height: 320px; }
@@ -1115,7 +1117,7 @@ const generateHTMLContent = (
     <body>
       ${
         isIOS
-          ? `<div class="ios-fit ${isFreezerDoc ? 'ios-fit--freezer' : ''}">`
+          ? `<div class="ios-fit ${isFreezerDoc ? 'ios-fit--freezer' : isColdRoomDoc ? 'ios-fit--coldroom' : ''}">`
           : ''
       }
       <div class="report-wrapper">
